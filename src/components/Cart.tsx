@@ -1,12 +1,19 @@
+/**
+ * Cart.tsx
+ * Manages the user's shopping cart.
+ * It handles listing cart items, removing them, and the final checkout process.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, query, where, onSnapshot, deleteDoc, doc, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from './ui/card';
+import { collection, query, where, onSnapshot, deleteDoc, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from './ui/card';
 import { Button } from './ui/button';
 import { Trash2, ShoppingCart, CreditCard, ArrowLeft, PackageCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 
+// Interface for items stored in the cart
 interface CartItem {
   id: string;
   userId: string;
@@ -19,21 +26,30 @@ interface CartItem {
 }
 
 interface Props {
-  onBack: () => void;
+  onBack: () => void; // Function to navigate back to the marketplace
 }
 
 export default function Cart({ onBack }: Props) {
+  // State for storing items currently in the cart
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  
+  // State to show a loading spinner during the checkout process
   const [isCheckingOut, setIsCheckingOut] = useState(false);
 
+  /**
+   * useEffect Hook
+   * Listens to the user's 'cart' collection in real-time.
+   */
   useEffect(() => {
     if (!auth.currentUser) return;
 
+    // Query to get all cart items for the logged-in user
     const cartQuery = query(
       collection(db, 'cart'),
       where('userId', '==', auth.currentUser.uid)
     );
 
+    // onSnapshot keeps the UI in sync with the database
     const unsubscribe = onSnapshot(cartQuery, (snapshot) => {
       setCartItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CartItem)));
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'cart'));
@@ -41,6 +57,10 @@ export default function Cart({ onBack }: Props) {
     return () => unsubscribe();
   }, []);
 
+  /**
+   * removeFromCart
+   * Deletes a specific item from the 'cart' collection.
+   */
   const removeFromCart = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'cart', id));
@@ -51,15 +71,23 @@ export default function Cart({ onBack }: Props) {
     }
   };
 
+  /**
+   * handleCheckout
+   * Simulates a payment process and converts cart items into official orders.
+   * We use a 'writeBatch' to ensure that either all orders are created AND cart is cleared,
+   * or nothing happens (Atomicity).
+   */
   const handleCheckout = async () => {
     if (!auth.currentUser || cartItems.length === 0) return;
     
     setIsCheckingOut(true);
     try {
+      // Initialize a Firestore write batch
       const batch = writeBatch(db);
       
-      // Create orders for each item
+      // Loop through each item in the cart
       for (const item of cartItems) {
+        // 1. Prepare an 'Order' document for the seller
         const orderRef = doc(collection(db, 'orders'));
         batch.set(orderRef, {
           buyerId: auth.currentUser.uid,
@@ -72,14 +100,16 @@ export default function Cart({ onBack }: Props) {
           createdAt: serverTimestamp()
         });
         
-        // Remove from cart
+        // 2. Prepare to remove this item from the cart
         const cartRef = doc(db, 'cart', item.id);
         batch.delete(cartRef);
       }
       
+      // Commit all changes in the batch to the database at once
       await batch.commit();
+      
       toast.success('Payment successful! Your orders have been placed.');
-      onBack();
+      onBack(); // Go back to the marketplace after successful checkout
     } catch (error) {
       console.error(error);
       toast.error('Checkout failed. Please try again.');
@@ -88,8 +118,10 @@ export default function Cart({ onBack }: Props) {
     }
   };
 
+  // Calculate the total price of all items in the cart
   const total = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
+  // Show an empty state if the cart is empty
   if (cartItems.length === 0) {
     return (
       <div className="max-w-2xl mx-auto p-4 text-center py-20 space-y-6">
@@ -108,6 +140,7 @@ export default function Cart({ onBack }: Props) {
 
   return (
     <div className="max-w-4xl mx-auto p-4 space-y-8">
+      {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={onBack}>
           <ArrowLeft className="w-5 h-5" />
@@ -116,6 +149,7 @@ export default function Cart({ onBack }: Props) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* List of Cart Items */}
         <div className="lg:col-span-2 space-y-4">
           <AnimatePresence mode="popLayout">
             {cartItems.map((item) => (
@@ -154,6 +188,7 @@ export default function Cart({ onBack }: Props) {
           </AnimatePresence>
         </div>
 
+        {/* Order Summary Sidebar */}
         <div className="space-y-6">
           <Card>
             <CardHeader>

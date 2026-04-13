@@ -1,3 +1,9 @@
+/**
+ * SellerDashboard.tsx
+ * The interface for merchants/sellers.
+ * It allows users to list products for sale, manage their inventory, and fulfill orders.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, updateDoc } from 'firebase/firestore';
@@ -12,6 +18,7 @@ import { Plus, Package, ShoppingCart, Trash2, CheckCircle, Clock, Truck, Databas
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 
+// Sample data to help sellers quickly populate their store for testing
 const SAMPLE_PRODUCTS = [
   { name: 'Quantum Pro Headphones', description: 'Experience studio-quality sound with active noise cancellation and 40-hour battery life.', price: 299.99, imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80' },
   { name: 'Minimalist Desk Lamp', description: 'Sleek, touch-controlled LED lamp with adjustable brightness and color temperature.', price: 45.50, imageUrl: 'https://images.unsplash.com/photo-1534073828943-f801091bb18c?w=800&q=80' },
@@ -45,19 +52,33 @@ interface Order {
 }
 
 export default function SellerDashboard() {
+  // State for products listed by this seller
   const [products, setProducts] = useState<Product[]>([]);
+  
+  // State for orders received by this seller
   const [orders, setOrders] = useState<Order[]>([]);
+  
+  // State for controlling the "Add Product" modal
   const [isAddingProduct, setIsAddingProduct] = useState(false);
+  
+  // Form state for a new product
   const [newProduct, setNewProduct] = useState({
     name: '',
     description: '',
     price: '',
     imageUrl: ''
   });
+  
+  const [loading, setLoading] = useState(false);
 
+  /**
+   * useEffect Hook
+   * Sets up real-time listeners for this seller's products and orders.
+   */
   useEffect(() => {
     if (!auth.currentUser) return;
 
+    // 1. Listen to products where sellerId matches current user
     const productsQuery = query(
       collection(db, 'products'),
       where('sellerId', '==', auth.currentUser.uid)
@@ -67,6 +88,7 @@ export default function SellerDashboard() {
       setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'products'));
 
+    // 2. Listen to orders where sellerId matches current user
     const ordersQuery = query(
       collection(db, 'orders'),
       where('sellerId', '==', auth.currentUser.uid)
@@ -76,12 +98,17 @@ export default function SellerDashboard() {
       setOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order)));
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'orders'));
 
+    // Cleanup listeners
     return () => {
       unsubscribeProducts();
       unsubscribeOrders();
     };
   }, []);
 
+  /**
+   * handleAddProduct
+   * Saves a new product to the 'products' collection.
+   */
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth.currentUser) return;
@@ -103,6 +130,10 @@ export default function SellerDashboard() {
     }
   };
 
+  /**
+   * handleDeleteProduct
+   * Removes a product from the database.
+   */
   const handleDeleteProduct = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'products', id));
@@ -113,6 +144,10 @@ export default function SellerDashboard() {
     }
   };
 
+  /**
+   * updateOrderStatus
+   * Updates the status of an order (e.g., from 'pending' to 'shipped').
+   */
   const updateOrderStatus = async (orderId: string, status: string) => {
     try {
       await updateDoc(doc(db, 'orders', orderId), { status });
@@ -123,6 +158,10 @@ export default function SellerDashboard() {
     }
   };
 
+  /**
+   * handleSeedData
+   * Helper function to quickly add multiple sample products for demo purposes.
+   */
   const handleSeedData = async () => {
     if (!auth.currentUser) return;
     setLoading(true);
@@ -145,16 +184,16 @@ export default function SellerDashboard() {
     }
   };
 
-  const [loading, setLoading] = useState(false);
-
   return (
     <div className="max-w-6xl mx-auto p-4 space-y-8">
+      {/* Header Section */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Seller Dashboard</h1>
           <p className="text-muted-foreground">Manage your products and track your sales.</p>
         </div>
         <div className="flex gap-2">
+          {/* Seed Data Button */}
           <Button 
             variant="outline" 
             onClick={handleSeedData} 
@@ -164,68 +203,70 @@ export default function SellerDashboard() {
             <Database className="w-4 h-4 mr-2" />
             Seed Sample Data
           </Button>
+          {/* Add Product Modal Trigger */}
           <Dialog open={isAddingProduct} onOpenChange={setIsAddingProduct}>
-          <DialogTrigger asChild>
-            <Button className="bg-indigo-600 hover:bg-indigo-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Product
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add New Product</DialogTitle>
-              <DialogDescription>Fill in the details for your new listing.</DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleAddProduct} className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Product Name</Label>
-                <Input 
-                  id="name" 
-                  value={newProduct.name} 
-                  onChange={e => setNewProduct({...newProduct, name: e.target.value})} 
-                  required 
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Input 
-                  id="description" 
-                  value={newProduct.description} 
-                  onChange={e => setNewProduct({...newProduct, description: e.target.value})} 
-                  required 
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+            <DialogTrigger asChild>
+              <Button className="bg-indigo-600 hover:bg-indigo-700">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Product
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Product</DialogTitle>
+                <DialogDescription>Fill in the details for your new listing.</DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleAddProduct} className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="price">Price ($)</Label>
+                  <Label htmlFor="name">Product Name</Label>
                   <Input 
-                    id="price" 
-                    type="number" 
-                    step="0.01" 
-                    value={newProduct.price} 
-                    onChange={e => setNewProduct({...newProduct, price: e.target.value})} 
+                    id="name" 
+                    value={newProduct.name} 
+                    onChange={e => setNewProduct({...newProduct, name: e.target.value})} 
                     required 
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="image">Image URL</Label>
+                  <Label htmlFor="description">Description</Label>
                   <Input 
-                    id="image" 
-                    value={newProduct.imageUrl} 
-                    onChange={e => setNewProduct({...newProduct, imageUrl: e.target.value})} 
-                    placeholder="https://..."
+                    id="description" 
+                    value={newProduct.description} 
+                    onChange={e => setNewProduct({...newProduct, description: e.target.value})} 
+                    required 
                   />
                 </div>
-              </div>
-              <DialogFooter>
-                <Button type="submit" className="w-full bg-indigo-600">Create Listing</Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="price">Price ($)</Label>
+                    <Input 
+                      id="price" 
+                      type="number" 
+                      step="0.01" 
+                      value={newProduct.price} 
+                      onChange={e => setNewProduct({...newProduct, price: e.target.value})} 
+                      required 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="image">Image URL</Label>
+                    <Input 
+                      id="image" 
+                      value={newProduct.imageUrl} 
+                      onChange={e => setNewProduct({...newProduct, imageUrl: e.target.value})} 
+                      placeholder="https://..."
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="submit" className="w-full bg-indigo-600">Create Listing</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
-    </div>
 
+      {/* Tabs for switching between Inventory and Sales */}
       <Tabs defaultValue="products" className="w-full">
         <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="products">
@@ -238,6 +279,7 @@ export default function SellerDashboard() {
           </TabsTrigger>
         </TabsList>
         
+        {/* Inventory View */}
         <TabsContent value="products" className="mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <AnimatePresence mode="popLayout">
@@ -274,6 +316,7 @@ export default function SellerDashboard() {
                 </motion.div>
               ))}
             </AnimatePresence>
+            {/* Empty State for Inventory */}
             {products.length === 0 && (
               <div className="col-span-full py-12 text-center border-2 border-dashed rounded-xl">
                 <Package className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
@@ -284,6 +327,7 @@ export default function SellerDashboard() {
           </div>
         </TabsContent>
 
+        {/* Sales Orders View */}
         <TabsContent value="orders" className="mt-6">
           <div className="space-y-4">
             {orders.map(order => (
@@ -302,6 +346,7 @@ export default function SellerDashboard() {
                     Order ID: {order.id.slice(0, 8)} • Quantity: {order.quantity} • Total: ${order.totalPrice.toFixed(2)}
                   </p>
                 </div>
+                {/* Order Status Actions */}
                 <div className="flex gap-2">
                   {order.status === 'pending' && (
                     <Button size="sm" onClick={() => updateOrderStatus(order.id, 'shipped')}>
@@ -318,6 +363,7 @@ export default function SellerDashboard() {
                 </div>
               </Card>
             ))}
+            {/* Empty State for Sales */}
             {orders.length === 0 && (
               <div className="py-12 text-center border-2 border-dashed rounded-xl">
                 <Clock className="w-12 h-12 mx-auto text-muted-foreground mb-4" />

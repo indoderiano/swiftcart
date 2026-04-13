@@ -1,5 +1,11 @@
+/**
+ * Auth.tsx
+ * Handles user authentication (Login/Sign-up) using Google.
+ * It also manages the initial role selection (Buyer vs. Seller).
+ */
+
 import React, { useState } from 'react';
-import { auth, db, googleProvider, handleFirestoreError, OperationType } from '../lib/firebase';
+import { auth, db, googleProvider } from '../lib/firebase';
 import { signInWithPopup } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -8,33 +14,44 @@ import { Label } from './ui/label';
 import { ShoppingBag, Store, LogIn } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Need to add radio-group to shadcn
 export default function Auth() {
+  // Local state to track which role the user has selected on the login screen
   const [role, setRole] = useState<'buyer' | 'seller'>('buyer');
+  
+  // Loading state for the sign-in button
   const [loading, setLoading] = useState(false);
 
+  /**
+   * handleLogin
+   * Triggered when the user clicks the "Sign in with Google" button.
+   */
   const handleLogin = async () => {
     setLoading(true);
     try {
+      // 1. Open the Google Sign-in popup
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
       
+      // 2. Check if this user already has a profile in our Firestore 'users' collection
       const userDocRef = doc(db, 'users', user.uid);
       const userDoc = await getDoc(userDocRef);
 
       if (!userDoc.exists()) {
+        // 3a. New User: Create their profile document with the selected role
         await setDoc(userDocRef, {
           uid: user.uid,
           email: user.email,
           name: user.displayName,
           role: role,
-          createdAt: serverTimestamp()
+          createdAt: serverTimestamp() // Uses the server's time for consistency
         });
         toast.success(`Welcome to SwiftCart as a ${role}!`);
       } else {
-        // Update role if it's different from the current selection
+        // 3b. Existing User: Check if they want to switch roles
         const currentData = userDoc.data();
         if (currentData.role !== role) {
+          // If the selected role is different from their saved role, update it
+          // { merge: true } ensures we only update the specified fields and keep the rest
           await setDoc(userDocRef, { ...currentData, role: role }, { merge: true });
           toast.success(`Switched to ${role} mode!`);
         } else {
@@ -42,6 +59,7 @@ export default function Auth() {
         }
       }
     } catch (error: any) {
+      // Handle common Firebase Auth errors gracefully
       console.error('Sign-in error details:', error);
       let message = 'Failed to sign in. Please try again.';
       
@@ -70,9 +88,11 @@ export default function Auth() {
           <CardDescription>Your all-in-one e-commerce destination</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Role Selection UI */}
           <div className="space-y-4">
             <Label className="text-base font-semibold">I want to...</Label>
             <div className="grid grid-cols-2 gap-4">
+              {/* Buyer Option */}
               <button
                 onClick={() => setRole('buyer')}
                 className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all ${
@@ -84,6 +104,7 @@ export default function Auth() {
                 <ShoppingBag className="w-8 h-8 mb-2" />
                 <span className="font-medium">Buy Products</span>
               </button>
+              {/* Seller Option */}
               <button
                 onClick={() => setRole('seller')}
                 className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all ${
@@ -98,6 +119,7 @@ export default function Auth() {
             </div>
           </div>
 
+          {/* Sign-in Button */}
           <Button 
             onClick={handleLogin} 
             disabled={loading}
